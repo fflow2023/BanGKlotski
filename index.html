@@ -239,16 +239,17 @@
           width: auto;
         }
         #github-star {
-          padding: 5px 10px;
-          font-size: 11px;
+          padding: 6px;
+          font-size: 0;
+          gap: 0;
+          border-radius: 50%;
         }
         #github-star svg {
-          width: 14px;
-          height: 14px;
+          width: 16px;
+          height: 16px;
         }
         #github-star .star-icon {
-          width: 11px;
-          height: 11px;
+          display: none;
         }
       }
       #github-star {
@@ -536,6 +537,55 @@
       });
 
       // ============================================================
+      // 音效 (Web Audio API)
+      // ============================================================
+      let audioCtx = null;
+
+      function playMoveSound() {
+        if (!audioCtx)
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const t = audioCtx.currentTime;
+
+        const rand = (base, range) => base + (Math.random() - 0.5) * 2 * range;
+
+        const bufLen = Math.floor(audioCtx.sampleRate * 0.04);
+        const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buf;
+
+        const bandpass = audioCtx.createBiquadFilter();
+        bandpass.type = "bandpass";
+        bandpass.frequency.value = rand(2200, 300);
+        bandpass.Q.value = rand(3.0, 0.8);
+
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.setValueAtTime(rand(0.35, 0.05), t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+
+        noise.connect(bandpass);
+        bandpass.connect(noiseGain);
+        noiseGain.connect(audioCtx.destination);
+        noise.start(t);
+
+        // 层2: 低频正弦脉冲 → 木头碰撞的"哒"
+        const osc = audioCtx.createOscillator();
+        const oscGain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(rand(350, 40), t);
+        osc.frequency.exponentialRampToValueAtTime(rand(150, 20), t + 0.05);
+        oscGain.gain.setValueAtTime(rand(0.2, 0.03), t);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+
+        osc.connect(oscGain);
+        oscGain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.06);
+      }
+
+      // ============================================================
       // 碰撞检测与移动
       // ============================================================
 
@@ -583,6 +633,7 @@
         block.x += dx;
         block.y += dy;
         updateBlockPosition(block);
+        playMoveSound();
 
         if (!solving) {
           // 用户手动移动，使提示缓存失效
