@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+    <title>BanG Dream! 华容道</title>
+    <meta
+      name="description"
+      content="BanG Dream! 主题华容道益智游戏 - 帮助米歇尔离开电梯！"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: #4a6741;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+        overflow: hidden;
+      }
+
+      #game-wrapper {
+        position: relative;
+      }
+
+      #game-wrapper img.board-bg {
+        display: block;
+        width: 960px;
+        height: 540px;
+        pointer-events: none;
+      }
+
+      /* 棋盘网格区域 — 基于 board.png 像素测量 */
+      #board {
+        position: absolute;
+        top: 4.8%;
+        left: 25.3%;
+        width: 49.5%;
+        height: 89.5%;
+        overflow: hidden;
+      }
+
+      .block {
+        position: absolute;
+        cursor: grab;
+        transition:
+          left 0.18s ease-out,
+          top 0.18s ease-out;
+        border-radius: 6px;
+        overflow: hidden;
+        z-index: 1;
+      }
+
+      .block.dragging {
+        transition: none;
+        cursor: grabbing;
+        z-index: 50;
+        filter: brightness(1.05);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      }
+
+      .block:hover {
+        z-index: 10;
+        filter: brightness(1.08);
+      }
+
+      .block:active {
+        cursor: grabbing;
+      }
+
+      .block img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+        pointer-events: none;
+      }
+
+      /* 控制面板 — 右侧 */
+      #control-panel {
+        position: absolute;
+        top: 50%;
+        right: 2%;
+        transform: translateY(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        z-index: 20;
+      }
+
+      #step-label {
+        color: #c4a96a;
+        font-size: 14px;
+        font-weight: bold;
+        letter-spacing: 1px;
+      }
+
+      #step-display {
+        color: #e8b74a;
+        font-size: 52px;
+        font-weight: 900;
+        font-family: "Courier New", monospace;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        line-height: 1;
+      }
+
+      .btn {
+        padding: 8px 20px;
+        border: 2px solid #e8b74a;
+        background: rgba(0, 0, 0, 0.6);
+        color: #e8b74a;
+        font-size: 14px;
+        font-weight: bold;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        white-space: nowrap;
+        font-family: "Microsoft YaHei", sans-serif;
+        width: 90px;
+        text-align: center;
+      }
+
+      .btn:hover {
+        background: #e8b74a;
+        color: #1a1a1a;
+      }
+
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      /* Victory overlay */
+      #victory-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.75);
+        z-index: 100;
+        justify-content: center;
+        align-items: center;
+        animation: fadeIn 0.3s ease;
+      }
+
+      #victory-overlay.show {
+        display: flex;
+      }
+
+      #victory-box {
+        background: linear-gradient(135deg, #ff6b9d, #c44569);
+        border: 4px solid #fff;
+        border-radius: 20px;
+        padding: 40px 50px;
+        text-align: center;
+        color: #fff;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        animation: popIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+      }
+
+      #victory-box h2 {
+        font-size: 36px;
+        margin-bottom: 10px;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      #victory-box p {
+        font-size: 20px;
+        margin-bottom: 24px;
+        opacity: 0.9;
+      }
+
+      #victory-box .btn {
+        font-size: 16px;
+        padding: 10px 28px;
+        border-color: #fff;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.15);
+        width: auto;
+      }
+
+      #victory-box .btn:hover {
+        background: #fff;
+        color: #c44569;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes popIn {
+        from {
+          transform: scale(0.5);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      /* Responsive */
+      @media (max-width: 1100px) {
+        #control-panel {
+          right: -120px;
+        }
+      }
+      @media (max-width: 780px) {
+        #game-wrapper img.board-bg {
+          width: 100vw;
+          height: auto;
+        }
+        #control-panel {
+          right: -100px;
+        }
+        #step-display {
+          font-size: 7vw;
+        }
+        .btn {
+          font-size: 2.2vw;
+          padding: 1vw 2.5vw;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-wrapper">
+      <img class="board-bg" src="images/board.png" alt="棋盘背景" />
+
+      <div id="board"></div>
+
+      <div id="control-panel">
+        <div id="step-label">步 数</div>
+        <div id="step-display">0</div>
+        <button class="btn" id="btn-reset" onclick="resetGame()">重 置</button>
+        <button class="btn" id="btn-hint" onclick="getHint()">提 示</button>
+      </div>
+    </div>
+
+    <div id="victory-overlay">
+      <div id="victory-box">
+        <h2>🎉 通关成功！</h2>
+        <p>米歇尔成功逃出！用了 <span id="victory-steps">0</span> 步</p>
+        <button class="btn" onclick="resetGame()">再来一局</button>
+      </div>
+    </div>
+
+    <script>
+      // ============================================================
+      // 数据模型
+      // ============================================================
+      const COLS = 4;
+      const ROWS = 5;
+      // 方块之间的间距 (px)
+      const GAP = 2;
+
+      // 方块类型: [宽, 高]
+      const TYPES = {
+        "2x2": [2, 2],
+        "1x2": [1, 2],
+        "2x1": [2, 1],
+        "1x1": [1, 1],
+      };
+
+      // 初始布局 — 参照效果图
+      const INITIAL_LAYOUT = [
+        { id: "michelle", type: "2x2", x: 1, y: 0, img: "images/michelle.png" },
+        { id: "nyamu", type: "1x2", x: 0, y: 0, img: "images/nyamu.png" },
+        { id: "moca", type: "1x2", x: 3, y: 0, img: "images/moca.png" },
+        { id: "arisa", type: "1x2", x: 0, y: 2, img: "images/arisa.png" },
+        { id: "yukina", type: "2x1", x: 1, y: 2, img: "images/yukina.png" },
+        { id: "eve", type: "1x2", x: 3, y: 2, img: "images/eve.png" },
+        { id: "saya", type: "1x1", x: 1, y: 3, img: "images/saya.png" },
+        { id: "box", type: "1x1", x: 2, y: 3, img: "images/box.png" },
+        { id: "otae", type: "1x1", x: 0, y: 4, img: "images/otae.png" },
+        { id: "tsukushi", type: "1x1", x: 3, y: 4, img: "images/tsukushi.png" },
+      ];
+
+      // 当前游戏状态
+      let blocks = [];
+      let steps = 0;
+      let solving = false;
+
+      // 提示系统状态
+      let hintSolution = null; // 缓存的解题路径
+      let hintIndex = 0; // 当前提示到第几步
+      let hintStateKey = null; // 缓存对应的状态
+      let hintWorker = null; // Web Worker 引用
+      let hintComputing = false;
+
+      // 拖拽状态
+      let dragState = null;
+
+      // DOM 引用
+      const boardEl = document.getElementById("board");
+      const stepDisplay = document.getElementById("step-display");
+      const victoryOverlay = document.getElementById("victory-overlay");
+      const victorySteps = document.getElementById("victory-steps");
+
+      // ============================================================
+      // 渲染
+      // ============================================================
+      function deepCloneLayout(layout) {
+        return layout.map((b) => ({ ...b }));
+      }
+
+      function getCellSize() {
+        const boardRect = boardEl.getBoundingClientRect();
+        return {
+          cellW: boardRect.width / COLS,
+          cellH: boardRect.height / ROWS,
+        };
+      }
+
+      function renderBoard() {
+        boardEl.innerHTML = "";
+        const { cellW, cellH } = getCellSize();
+
+        blocks.forEach((block) => {
+          const [w, h] = TYPES[block.type];
+          const el = document.createElement("div");
+          el.className = "block";
+          el.id = "block-" + block.id;
+          el.style.width = cellW * w - GAP * 2 + "px";
+          el.style.height = cellH * h - GAP * 2 + "px";
+          el.style.left = block.x * cellW + GAP + "px";
+          el.style.top = block.y * cellH + GAP + "px";
+
+          const img = document.createElement("img");
+          img.src = block.img;
+          img.alt = block.id;
+          img.draggable = false;
+          el.appendChild(img);
+
+          // 鼠标拖拽
+          el.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            startDrag(block.id, e.clientX, e.clientY);
+          });
+
+          // 触摸拖拽
+          el.addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            startDrag(block.id, touch.clientX, touch.clientY);
+          });
+
+          boardEl.appendChild(el);
+        });
+      }
+
+      function updateBlockPosition(block) {
+        const { cellW, cellH } = getCellSize();
+        const el = document.getElementById("block-" + block.id);
+        if (!el) return;
+        el.style.left = block.x * cellW + GAP + "px";
+        el.style.top = block.y * cellH + GAP + "px";
+      }
+
+      // ============================================================
+      // 拖拽交互
+      // ============================================================
+      function startDrag(blockId, startX, startY) {
+        if (solving) return;
+        const block = blocks.find((b) => b.id === blockId);
+        if (!block) return;
+
+        const el = document.getElementById("block-" + blockId);
+        el.classList.add("dragging");
+
+        dragState = {
+          blockId,
+          startX,
+          startY,
+          origGridX: block.x,
+          origGridY: block.y,
+          moved: false,
+        };
+      }
+
+      function onDragMove(clientX, clientY) {
+        if (!dragState) return;
+
+        const { cellW, cellH } = getCellSize();
+        const dx = clientX - dragState.startX;
+        const dy = clientY - dragState.startY;
+
+        // 需要滑动超过半格才触发移动
+        const threshold = Math.min(cellW, cellH) * 0.2;
+
+        if (dragState.moved) return; // 已经触发过移动了
+
+        let moveDx = 0;
+        let moveDy = 0;
+
+        if (Math.abs(dx) > Math.abs(dy)) {
+          // 水平拖拽
+          if (dx > threshold) moveDx = 1;
+          else if (dx < -threshold) moveDx = -1;
+        } else {
+          // 垂直拖拽
+          if (dy > threshold) moveDy = 1;
+          else if (dy < -threshold) moveDy = -1;
+        }
+
+        if (moveDx !== 0 || moveDy !== 0) {
+          const success = moveBlock(dragState.blockId, moveDx, moveDy);
+          if (success) {
+            dragState.moved = true;
+          }
+        }
+      }
+
+      function endDrag() {
+        if (!dragState) return;
+        const el = document.getElementById("block-" + dragState.blockId);
+        if (el) el.classList.remove("dragging");
+        dragState = null;
+      }
+
+      // 全局鼠标事件
+      document.addEventListener("mousemove", (e) => {
+        onDragMove(e.clientX, e.clientY);
+      });
+
+      document.addEventListener("mouseup", () => {
+        endDrag();
+      });
+
+      // 全局触摸事件
+      document.addEventListener(
+        "touchmove",
+        (e) => {
+          if (dragState) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            onDragMove(touch.clientX, touch.clientY);
+          }
+        },
+        { passive: false },
+      );
+
+      document.addEventListener("touchend", () => {
+        endDrag();
+      });
+
+      document.addEventListener("touchcancel", () => {
+        endDrag();
+      });
+
+      // ============================================================
+      // 碰撞检测与移动
+      // ============================================================
+
+      // 构建 4x5 占用网格
+      function buildGrid(blocksState) {
+        const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+        blocksState.forEach((b) => {
+          const [w, h] = TYPES[b.type];
+          for (let dy = 0; dy < h; dy++) {
+            for (let dx = 0; dx < w; dx++) {
+              grid[b.y + dy][b.x + dx] = b.id;
+            }
+          }
+        });
+        return grid;
+      }
+
+      function canMove(block, dx, dy, grid) {
+        const [w, h] = TYPES[block.type];
+        const nx = block.x + dx;
+        const ny = block.y + dy;
+
+        // 边界检测
+        if (nx < 0 || ny < 0 || nx + w > COLS || ny + h > ROWS) return false;
+
+        // 碰撞检测：检查目标位置是否被其他方块占据
+        for (let r = 0; r < h; r++) {
+          for (let c = 0; c < w; c++) {
+            const targetR = ny + r;
+            const targetC = nx + c;
+            const occupant = grid[targetR][targetC];
+            if (occupant !== null && occupant !== block.id) return false;
+          }
+        }
+        return true;
+      }
+
+      function moveBlock(blockId, dx, dy) {
+        const block = blocks.find((b) => b.id === blockId);
+        if (!block) return false;
+
+        const grid = buildGrid(blocks);
+        if (!canMove(block, dx, dy, grid)) return false;
+
+        block.x += dx;
+        block.y += dy;
+        updateBlockPosition(block);
+
+        if (!solving) {
+          // 用户手动移动，使提示缓存失效
+          hintSolution = null;
+          hintIndex = 0;
+          hintStateKey = null;
+          steps++;
+          stepDisplay.textContent = steps;
+        }
+
+        // 胜利判定
+        if (block.id === "michelle" && block.x === 1 && block.y === 3) {
+          setTimeout(showVictory, 300);
+        }
+
+        return true;
+      }
+
+      // ============================================================
+      // 胜利
+      // ============================================================
+      function showVictory() {
+        victorySteps.textContent = steps;
+        victoryOverlay.classList.add("show");
+      }
+
+      // ============================================================
+      // 重置
+      // ============================================================
+      function resetGame() {
+        solving = false;
+        steps = 0;
+        stepDisplay.textContent = "0";
+        victoryOverlay.classList.remove("show");
+        blocks = deepCloneLayout(INITIAL_LAYOUT);
+        hintSolution = null;
+        hintIndex = 0;
+        hintStateKey = null;
+        hintComputing = false;
+        if (hintWorker) {
+          hintWorker.terminate();
+          hintWorker = null;
+        }
+        const btnHint = document.getElementById("btn-hint");
+        if (btnHint) {
+          btnHint.disabled = false;
+          btnHint.textContent = "提 示";
+        }
+        renderBoard();
+      }
+
+      // ============================================================
+      // 提示系统 (Web Worker BFS)
+      // ============================================================
+
+      // Web Worker 源码 — 使用类型编码进行高效 BFS
+      // 关键优化：同类型方块视为等价，只有 michelle 使用独立标识
+      // 这将状态空间从数百万降到约 25,000
+      const workerCode = `
+        const COLS = 4, ROWS = 5;
+        const TYPES = { '2x2': [2,2], '1x2': [1,2], '2x1': [2,1], '1x1': [1,1] };
+        // 类型编码: 0=空, 1=1x1, 2=1x2(占上半), 3=1x2(占下半), 4=2x1(占左半), 5=2x1(占右半),
+        //           6=michelle左上, 7=michelle右上, 8=michelle左下, 9=michelle右下
+
+        function encodeState(bs) {
+          const g = new Uint8Array(20);
+          for (const b of bs) {
+            const [w, h] = TYPES[b.type];
+            if (b.id === 'michelle') {
+              g[b.y * COLS + b.x] = 6;
+              g[b.y * COLS + b.x + 1] = 7;
+              g[(b.y + 1) * COLS + b.x] = 8;
+              g[(b.y + 1) * COLS + b.x + 1] = 9;
+            } else if (b.type === '1x1') {
+              g[b.y * COLS + b.x] = 1;
+            } else if (b.type === '1x2') {
+              g[b.y * COLS + b.x] = 2;
+              g[(b.y + 1) * COLS + b.x] = 3;
+            } else if (b.type === '2x1') {
+              g[b.y * COLS + b.x] = 4;
+              g[b.y * COLS + b.x + 1] = 5;
+            }
+          }
+          return String.fromCharCode.apply(null, g);
+        }
+
+        function buildGrid(bs) {
+          const grid = [];
+          for (let r = 0; r < ROWS; r++) grid[r] = new Array(COLS).fill(-1);
+          for (let i = 0; i < bs.length; i++) {
+            const b = bs[i];
+            const [w, h] = TYPES[b.type];
+            for (let dy = 0; dy < h; dy++)
+              for (let dx = 0; dx < w; dx++)
+                grid[b.y + dy][b.x + dx] = i;
+          }
+          return grid;
+        }
+
+        function canMove(b, dx, dy, grid, idx) {
+          const [w, h] = TYPES[b.type];
+          const nx = b.x + dx, ny = b.y + dy;
+          if (nx < 0 || ny < 0 || nx + w > COLS || ny + h > ROWS) return false;
+          for (let r = 0; r < h; r++)
+            for (let c = 0; c < w; c++) {
+              const occ = grid[ny + r][nx + c];
+              if (occ !== -1 && occ !== idx) return false;
+            }
+          return true;
+        }
+
+        self.onmessage = function(e) {
+          const startBlocks = e.data;
+          const visited = new Set();
+          const startKey = encodeState(startBlocks);
+          visited.add(startKey);
+
+          const queue = [startBlocks.map(b => ({...b}))];
+          const parent = [null];
+          let head = 0;
+
+          const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+
+          while (head < queue.length) {
+            const state = queue[head];
+            const michIdx = state.findIndex(b => b.id === 'michelle');
+
+            if (state[michIdx].x === 1 && state[michIdx].y === 3) {
+              const path = [];
+              let cur = head;
+              while (parent[cur] !== null) {
+                const p = parent[cur];
+                path.unshift({ id: queue[p.stateIdx][p.blockIdx].id, dx: p.dx, dy: p.dy });
+                cur = p.stateIdx;
+              }
+              self.postMessage({ success: true, moves: path });
+              return;
+            }
+
+            const grid = buildGrid(state);
+
+            for (let bi = 0; bi < state.length; bi++) {
+              const b = state[bi];
+              for (const [dx, dy] of dirs) {
+                if (!canMove(b, dx, dy, grid, bi)) continue;
+                const ns = state.map(x => ({...x}));
+                ns[bi] = {...ns[bi], x: ns[bi].x + dx, y: ns[bi].y + dy};
+                const key = encodeState(ns);
+                if (visited.has(key)) continue;
+                visited.add(key);
+                queue.push(ns);
+                parent.push({ stateIdx: head, blockIdx: bi, dx, dy });
+              }
+            }
+            head++;
+          }
+
+          self.postMessage({ success: false });
+        };
+      `;
+
+      function getHint() {
+        if (solving || hintComputing) return;
+
+        const btnHint = document.getElementById("btn-hint");
+
+        // 如果有缓存的解且还有后续步骤，直接执行
+        if (hintSolution && hintIndex < hintSolution.length) {
+          const move = hintSolution[hintIndex];
+          // 标记为 solving 以避免清除缓存
+          solving = true;
+          moveBlock(move.id, move.dx, move.dy);
+          steps++;
+          stepDisplay.textContent = steps;
+          solving = false;
+          hintIndex++;
+          if (hintIndex >= hintSolution.length) {
+            hintSolution = null;
+            hintStateKey = null;
+          }
+          return;
+        }
+
+        // 需要重新计算
+        hintComputing = true;
+        btnHint.disabled = true;
+        btnHint.textContent = "思考中…";
+
+        const blob = new Blob([workerCode], { type: "application/javascript" });
+        const url = URL.createObjectURL(blob);
+        hintWorker = new Worker(url);
+
+        hintWorker.onmessage = function (e) {
+          URL.revokeObjectURL(url);
+          hintWorker = null;
+          hintComputing = false;
+          btnHint.disabled = false;
+          btnHint.textContent = "提 示";
+
+          if (e.data.success && e.data.moves.length > 0) {
+            hintSolution = e.data.moves;
+            hintIndex = 0;
+            // 立即执行第一步
+            const move = hintSolution[hintIndex];
+            solving = true;
+            moveBlock(move.id, move.dx, move.dy);
+            steps++;
+            stepDisplay.textContent = steps;
+            solving = false;
+            hintIndex++;
+            if (hintIndex >= hintSolution.length) {
+              hintSolution = null;
+              hintStateKey = null;
+            }
+          }
+        };
+
+        hintWorker.onerror = function () {
+          URL.revokeObjectURL(url);
+          hintWorker = null;
+          hintComputing = false;
+          btnHint.disabled = false;
+          btnHint.textContent = "提 示";
+          alert("求解出错，请重试");
+        };
+
+        // 发送当前状态给 Worker
+        hintWorker.postMessage(deepCloneLayout(blocks));
+      }
+
+      // ============================================================
+      // 启动
+      // ============================================================
+      window.addEventListener("load", () => {
+        resetGame();
+      });
+
+      window.addEventListener("resize", () => {
+        renderBoard();
+      });
+    </script>
+  </body>
+</html>
