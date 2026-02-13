@@ -145,7 +145,7 @@
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.75);
-        z-index: 100;
+        z-index: 300;
         justify-content: center;
         align-items: center;
         animation: fadeIn 0.3s ease;
@@ -212,46 +212,6 @@
         }
       }
 
-      /* Responsive */
-      @media (max-width: 780px) {
-        #game-wrapper img.board-bg {
-          width: 100vw;
-          height: auto;
-        }
-        #control-panel {
-          position: absolute;
-          top: auto;
-          bottom: -50px;
-          right: 50%;
-          transform: translateX(50%);
-          flex-direction: row;
-          gap: 16px;
-        }
-        #step-label {
-          display: none;
-        }
-        #step-display {
-          font-size: 28px;
-        }
-        .btn {
-          font-size: 13px;
-          padding: 6px 14px;
-          width: auto;
-        }
-        #github-star {
-          padding: 6px;
-          font-size: 0;
-          gap: 0;
-          border-radius: 50%;
-        }
-        #github-star svg {
-          width: 16px;
-          height: 16px;
-        }
-        #github-star .star-icon {
-          display: none;
-        }
-      }
       #github-star {
         position: absolute;
         top: 8px;
@@ -290,6 +250,47 @@
         width: 14px;
         height: 14px;
       }
+
+      /* Responsive */
+      @media (max-width: 780px) {
+        #game-wrapper img.board-bg {
+          width: 100vw;
+          height: auto;
+        }
+        #control-panel {
+          position: absolute;
+          top: auto;
+          bottom: -50px;
+          right: 50%;
+          transform: translateX(50%);
+          flex-direction: row;
+          gap: 16px;
+        }
+        #step-label {
+          display: none;
+        }
+        #step-display {
+          font-size: 28px;
+        }
+        .btn {
+          font-size: 13px;
+          padding: 6px 14px;
+          width: auto;
+        }
+        #github-star {
+          padding: 6px;
+          gap: 0;
+          border-radius: 50%;
+        }
+        #github-star svg:first-child {
+          width: 16px;
+          height: 16px;
+        }
+        #github-star .star-icon,
+        #github-star .star-text {
+          display: none;
+        }
+      }
     </style>
   </head>
   <body>
@@ -312,7 +313,7 @@
             d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"
           />
         </svg>
-        Star
+        <span class="star-text"></span>Star</span>
       </a>
 
       <div id="board"></div>
@@ -570,11 +571,10 @@
         noiseGain.connect(audioCtx.destination);
         noise.start(t);
 
-        // 层2: 低频正弦脉冲 → 木头碰撞的"哒"
         const osc = audioCtx.createOscillator();
         const oscGain = audioCtx.createGain();
         osc.type = "sine";
-        osc.frequency.setValueAtTime(rand(350, 40), t);
+        osc.frequency.setValueAtTime(rand(420, 40), t);
         osc.frequency.exponentialRampToValueAtTime(rand(150, 20), t + 0.05);
         oscGain.gain.setValueAtTime(rand(0.2, 0.03), t);
         oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
