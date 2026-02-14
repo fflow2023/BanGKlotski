@@ -1,0 +1,10 @@
+# Static Assets Caching
+/images/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/audio/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML and other assets
+/*.html
+  Cache-Control: public, max-age=3600, must-revalidate

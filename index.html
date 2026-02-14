@@ -8,6 +8,12 @@
     />
     <title>BanG Dream! 华容道</title>
     <meta name="description" content="BanG Dream! 主题华容道益智游戏！" />
+    <link
+      rel="preload"
+      href="images/board1.png"
+      as="image"
+      fetchpriority="high"
+    />
     <style>
       * {
         margin: 0;
@@ -370,7 +376,12 @@
   <body>
     <div id="game-wrapper">
       <div id="board-inner">
-        <img class="board-bg" src="images/board1.png" alt="棋盘背景" />
+        <img
+          class="board-bg"
+          src="images/board1.png"
+          alt="棋盘背景"
+          fetchpriority="high"
+        />
         <div id="elevator-floor"></div>
 
         <a
@@ -625,8 +636,8 @@
       // 角色语音配置表：在此处手动维护存在的音频文件
       // 如果添加新角色的语音，请在此处添加:
       const CHARACTER_AUDIO_MAP = {
-        eve: ["images/eve.mp3"],
-        // "michelle": ["images/michelle-1.mp3","images/michelle-2.mp3"],
+        eve: ["audio/eve.mp3"],
+        // "michelle": ["audio/michelle-1.mp3","audio/michelle-2.mp3"],
       };
 
       function tryPlayAudio(src) {
@@ -680,10 +691,10 @@
 
       // 方块类型到音频文件的映射
       const typeSoundMap = {
-        "2x2": "images/2x2.mp3",
-        "1x2": "images/1x2.mp3",
-        "2x1": "images/1x2.mp3",
-        "1x1": "images/1x1.mp3",
+        "2x2": "audio/2x2.mp3",
+        "1x2": "audio/1x2.mp3",
+        "2x1": "audio/1x2.mp3",
+        "1x1": "audio/1x1.mp3",
       };
 
       // 播放移动音效：类型音 + 角色音
@@ -701,13 +712,13 @@
 
       // 播放通关音效
       function playWinSound() {
-        tryPlayAudio("images/win.mp3");
+        tryPlayAudio("audio/win.mp3");
       }
 
       // 预加载所有音频资源
       function preloadSounds() {
         const audioList = [
-          "images/win.mp3",
+          "audio/win.mp3",
           ...Object.values(typeSoundMap),
           ...Object.values(CHARACTER_AUDIO_MAP).flat(),
         ];
