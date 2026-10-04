@@ -10,7 +10,7 @@
     <meta name="description" content="BanG Dream! 主题华容道益智游戏！" />
     <link
       rel="preload"
-      href="images/board1.png"
+      href="images/board1.webp"
       as="image"
       fetchpriority="high"
     />
@@ -45,7 +45,7 @@
         pointer-events: none;
       }
 
-      /* 棋盘网格区域 — 基于 board1.png 像素测量 */
+      /* 棋盘网格区域 — 基于 board1.webp 像素测量 */
       #board {
         position: absolute;
         top: 4.8%;
@@ -378,7 +378,7 @@
       <div id="board-inner">
         <img
           class="board-bg"
-          src="images/board1.png"
+          src="images/board1.webp"
           alt="棋盘背景"
           fetchpriority="high"
         />
@@ -444,28 +444,31 @@
 
       // 初始布局 — 参照效果图
       const INITIAL_LAYOUT = [
-        { id: "michelle", type: "2x2", x: 1, y: 0, img: "images/michelle.png" },
-        { id: "nyamu", type: "1x2", x: 0, y: 0, img: "images/nyamu.png" },
-        { id: "moca", type: "1x2", x: 3, y: 0, img: "images/moca.png" },
-        { id: "arisa", type: "1x2", x: 0, y: 2, img: "images/arisa.png" },
-        { id: "yukina", type: "2x1", x: 1, y: 2, img: "images/yukina.png" },
-        { id: "eve", type: "1x2", x: 3, y: 2, img: "images/eve.png" },
-        { id: "saya", type: "1x1", x: 1, y: 3, img: "images/saya.png" },
-        { id: "box", type: "1x1", x: 2, y: 3, img: "images/box.png" },
-        { id: "otae", type: "1x1", x: 0, y: 4, img: "images/otae.png" },
-        { id: "tsukushi", type: "1x1", x: 3, y: 4, img: "images/tsukushi.png" },
+        { id: "michelle", type: "2x2", x: 1, y: 0, img: "images/michelle.webp" },
+        { id: "nyamu", type: "1x2", x: 0, y: 0, img: "images/nyamu.webp" },
+        { id: "moca", type: "1x2", x: 3, y: 0, img: "images/moca.webp" },
+        { id: "arisa", type: "1x2", x: 0, y: 2, img: "images/arisa.webp" },
+        { id: "yukina", type: "2x1", x: 1, y: 2, img: "images/yukina.webp" },
+        { id: "eve", type: "1x2", x: 3, y: 2, img: "images/eve.webp" },
+        { id: "saya", type: "1x1", x: 1, y: 3, img: "images/saya.webp" },
+        { id: "box", type: "1x1", x: 2, y: 3, img: "images/box.webp" },
+        { id: "otae", type: "1x1", x: 0, y: 4, img: "images/otae.webp" },
+        { id: "tsukushi", type: "1x1", x: 3, y: 4, img: "images/tsukushi.webp" },
       ];
 
       // 当前游戏状态
       let blocks = [];
       let steps = 0;
       let solving = false;
+      let boardVersion = 0;
+      let victoryTimer = null;
 
       // 提示系统状态
       let hintSolution = null; // 缓存的解题路径
       let hintIndex = 0; // 当前提示到第几步
       let hintStateKey = null; // 缓存对应的状态
       let hintWorker = null; // Web Worker 引用
+      let hintWorkerUrl = null;
       let hintComputing = false;
 
       // 拖拽状态
@@ -530,7 +533,8 @@
       }
 
       function updateBlockPosition(block) {
-        const { cellW, cellH } = getCellSize();
+        const { cellW, cellH } =
+          dragState && dragState.blockId === block.id ? dragState : getCellSize();
         const el = document.getElementById("block-" + block.id);
         if (!el) return;
         el.style.left = block.x * cellW + GAP + "px";
@@ -546,29 +550,28 @@
         if (!block) return;
 
         const el = document.getElementById("block-" + blockId);
+        const { cellW, cellH } = getCellSize();
         el.classList.add("dragging");
 
         dragState = {
           blockId,
           startX,
           startY,
-          origGridX: block.x,
-          origGridY: block.y,
+          cellW,
+          cellH,
+          threshold: Math.min(cellW, cellH) * 0.1,
           moved: false,
         };
       }
 
       function onDragMove(clientX, clientY) {
-        if (!dragState) return;
+        if (!dragState || dragState.moved) return;
 
-        const { cellW, cellH } = getCellSize();
         const dx = clientX - dragState.startX;
         const dy = clientY - dragState.startY;
 
-        // 需要滑动超过半格才触发移动
-        const threshold = Math.min(cellW, cellH) * 0.1;
-
-        if (dragState.moved) return; // 已经触发过移动了
+        // 滑动超过一格的 10% 才触发移动，每次拖拽只移动一次
+        const { threshold } = dragState;
 
         let moveDx = 0;
         let moveDy = 0;
@@ -632,6 +635,7 @@
       // 音效系统 (使用音频文件)
       // ============================================================
       const audioCache = {};
+      const AUDIO_POOL_SIZE = 4;
 
       // 角色语音配置表：在此处手动维护存在的音频文件
       // 如果添加新角色的语音，请在此处添加:
@@ -640,29 +644,40 @@
         // "michelle": ["audio/michelle-1.mp3","audio/michelle-2.mp3"],
       };
 
-      function tryPlayAudio(src) {
-        // 先检查缓存
-        if (audioCache[src]) {
-          const a = audioCache[src].cloneNode();
-          a.volume = audioCache[src].volume || 0.6;
-          a.play().catch(() => {});
-          return;
-        }
-
-        // 创建新音频对象
+      function createAudio(src) {
         const audio = new Audio(src);
+        audio.preload = "auto";
         audio.volume = 0.6;
+        return audio;
+      }
 
-        // 尝试播放
-        const p = audio.play();
-        if (p !== undefined) {
-          p.then(() => {
-            // 播放成功才缓存
-            audioCache[src] = audio;
-          }).catch((e) => {
-            console.warn("Audio play failed or file not found:", src);
-          });
+      function getAudioPool(src) {
+        if (!audioCache[src]) {
+          audioCache[src] = { voices: [createAudio(src)], next: 0 };
         }
+        return audioCache[src];
+      }
+
+      function tryPlayAudio(src) {
+        const pool = getAudioPool(src);
+        let index = pool.voices.findIndex((audio) => audio.paused || audio.ended);
+        if (index === -1 && pool.voices.length < AUDIO_POOL_SIZE) {
+          index = pool.voices.length;
+          pool.voices.push(createAudio(src));
+        }
+        // 音效重叠时最多保留四个播放实例，达到上限则轮流复用
+        if (index === -1) index = pool.next;
+        const audio = pool.voices[index];
+        pool.next = (index + 1) % pool.voices.length;
+        audio.pause();
+        audio.currentTime = 0;
+        audio.play()?.catch(() => {});
+      }
+
+      function stopSounds() {
+        Object.values(audioCache).forEach((pool) => {
+          pool.voices.forEach((audio) => audio.pause());
+        });
       }
 
       let voiceEnabled = true;
@@ -727,13 +742,7 @@
         const uniqueSrcs = [...new Set(audioList)];
 
         uniqueSrcs.forEach((src) => {
-          if (!audioCache[src]) {
-            const audio = new Audio();
-            audio.src = src;
-            audio.volume = 0.6;
-            audio.load(); // 强制加载
-            audioCache[src] = audio;
-          }
+          getAudioPool(src).voices[0].load();
         });
       }
 
@@ -782,27 +791,33 @@
         const grid = buildGrid(blocks);
         if (!canMove(block, dx, dy, grid)) return false;
 
+        if (!solving) {
+          // 手动移动同时取消旧求解，避免返回的提示操作过期棋盘
+          stopHintComputation();
+          clearHintSolution();
+        }
         block.x += dx;
         block.y += dy;
+        boardVersion++;
         updateBlockPosition(block);
         playMoveSound(block);
 
-        if (!solving) {
-          // 用户手动移动，使提示缓存失效
-          hintSolution = null;
-          hintIndex = 0;
-          hintStateKey = null;
-          steps++;
-          stepDisplay.textContent = steps;
-          updateFloorDisplay();
-        }
+        // 手动移动和提示共用计数，只统计成功执行的移动
+        steps++;
+        stepDisplay.textContent = steps;
+        updateFloorDisplay();
 
         // 胜利判定
-        if (block.id === "michelle" && block.x === 1 && block.y === 3) {
-          setTimeout(() => {
-            playWinSound();
-            showVictory();
-          }, 300);
+        if (block.id === "michelle") {
+          clearTimeout(victoryTimer);
+          victoryTimer = null;
+          if (block.x === 1 && block.y === 3) {
+            victoryTimer = setTimeout(() => {
+              victoryTimer = null;
+              playWinSound();
+              showVictory();
+            }, 300);
+          }
         }
 
         return true;
@@ -820,24 +835,18 @@
       // 重置
       // ============================================================
       function resetGame() {
+        endDrag();
+        stopHintComputation();
+        clearHintSolution();
+        stopSounds();
+        clearTimeout(victoryTimer);
+        victoryTimer = null;
+        boardVersion++;
         solving = false;
         steps = 0;
         stepDisplay.textContent = "0";
         victoryOverlay.classList.remove("show");
         blocks = deepCloneLayout(INITIAL_LAYOUT);
-        hintSolution = null;
-        hintIndex = 0;
-        hintStateKey = null;
-        hintComputing = false;
-        if (hintWorker) {
-          hintWorker.terminate();
-          hintWorker = null;
-        }
-        const btnHint = document.getElementById("btn-hint");
-        if (btnHint) {
-          btnHint.disabled = false;
-          btnHint.textContent = "提 示";
-        }
         renderBoard();
         updateFloorDisplay();
       }
@@ -875,8 +884,10 @@
           0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0,
         ],
       };
+      let displayedFloor = null;
       function updateFloorDisplay() {
         const floor = Math.min(7, Math.floor(steps / 50) + 1);
+        if (floor === displayedFloor) return;
         const container = document.getElementById("elevator-floor");
         if (!container) return;
         container.innerHTML = "";
@@ -889,6 +900,7 @@
           grid.appendChild(px);
         }
         container.appendChild(grid);
+        displayedFloor = floor;
       }
 
       // 初始化楼层显示
@@ -911,99 +923,93 @@
       const workerCode = `
         const COLS = 4, ROWS = 5;
         const TYPES = { '2x2': [2,2], '1x2': [1,2], '2x1': [2,1], '1x1': [1,1] };
-        // 类型编码: 0=空, 1=1x1, 2=1x2(占上半), 3=1x2(占下半), 4=2x1(占左半), 5=2x1(占右半),
-        //           6=michelle左上, 7=michelle右上, 8=michelle左下, 9=michelle右下
-
-        function encodeState(bs) {
-          const g = new Uint8Array(20);
-          for (const b of bs) {
-            const [w, h] = TYPES[b.type];
-            if (b.id === 'michelle') {
-              g[b.y * COLS + b.x] = 6;
-              g[b.y * COLS + b.x + 1] = 7;
-              g[(b.y + 1) * COLS + b.x] = 8;
-              g[(b.y + 1) * COLS + b.x + 1] = 9;
-            } else if (b.type === '1x1') {
-              g[b.y * COLS + b.x] = 1;
-            } else if (b.type === '1x2') {
-              g[b.y * COLS + b.x] = 2;
-              g[(b.y + 1) * COLS + b.x] = 3;
-            } else if (b.type === '2x1') {
-              g[b.y * COLS + b.x] = 4;
-              g[b.y * COLS + b.x + 1] = 5;
-            }
-          }
-          return String.fromCharCode.apply(null, g);
-        }
-
-        function buildGrid(bs) {
-          const grid = [];
-          for (let r = 0; r < ROWS; r++) grid[r] = new Array(COLS).fill(-1);
-          for (let i = 0; i < bs.length; i++) {
-            const b = bs[i];
-            const [w, h] = TYPES[b.type];
-            for (let dy = 0; dy < h; dy++)
-              for (let dx = 0; dx < w; dx++)
-                grid[b.y + dy][b.x + dx] = i;
-          }
-          return grid;
-        }
-
-        function canMove(b, dx, dy, grid, idx) {
-          const [w, h] = TYPES[b.type];
-          const nx = b.x + dx, ny = b.y + dy;
-          if (nx < 0 || ny < 0 || nx + w > COLS || ny + h > ROWS) return false;
-          for (let r = 0; r < h; r++)
-            for (let c = 0; c < w; c++) {
-              const occ = grid[ny + r][nx + c];
-              if (occ !== -1 && occ !== idx) return false;
-            }
-          return true;
-        }
+        const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
 
         self.onmessage = function(e) {
           const startBlocks = e.data;
-          const visited = new Set();
-          const startKey = encodeState(startBlocks);
-          visited.add(startKey);
+          const widths = startBlocks.map(b => TYPES[b.type][0]);
+          const heights = startBlocks.map(b => TYPES[b.type][1]);
+          const codes = startBlocks.map(b => b.id === 'michelle' ? 6 :
+            b.type === '1x1' ? 1 : b.type === '1x2' ? 2 : 4);
+          const michIdx = startBlocks.findIndex(b => b.id === 'michelle');
+          // 每个状态只存十个棋子的格子索引，角色元数据只保留一份
+          const start = Uint8Array.from(startBlocks, b => b.y * COLS + b.x);
+          const grid = new Int8Array(COLS * ROWS);
+          const typeGrid = new Uint8Array(COLS * ROWS);
 
-          const queue = [startBlocks.map(b => ({...b}))];
-          const parent = [null];
+          function encodeState(state) {
+            typeGrid.fill(0);
+            for (let i = 0; i < state.length; i++) {
+              const pos = state[i], code = codes[i];
+              typeGrid[pos] = code;
+              if (widths[i] === 2) typeGrid[pos + 1] = code + 1;
+              if (heights[i] === 2) {
+                typeGrid[pos + COLS] = code + (code === 6 ? 2 : 1);
+                if (widths[i] === 2) typeGrid[pos + COLS + 1] = code + 3;
+              }
+            }
+            // 同类型棋子的身份不参与去重，但路径仍使用固定角色索引
+            return String.fromCharCode.apply(null, typeGrid);
+          }
+
+          const visited = new Set([encodeState(start)]);
+          const queue = [start];
+          const parents = [-1], movedBlocks = [-1], moveDirs = [-1];
           let head = 0;
-
-          const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
 
           while (head < queue.length) {
             const state = queue[head];
-            const michIdx = state.findIndex(b => b.id === 'michelle');
 
-            if (state[michIdx].x === 1 && state[michIdx].y === 3) {
+            if (state[michIdx] === 3 * COLS + 1) {
               const path = [];
               let cur = head;
-              while (parent[cur] !== null) {
-                const p = parent[cur];
-                path.unshift({ id: queue[p.stateIdx][p.blockIdx].id, dx: p.dx, dy: p.dy });
-                cur = p.stateIdx;
+              while (parents[cur] !== -1) {
+                const [dx, dy] = dirs[moveDirs[cur]];
+                path.push({ id: startBlocks[movedBlocks[cur]].id, dx, dy });
+                cur = parents[cur];
               }
+              path.reverse();
               self.postMessage({ success: true, moves: path });
               return;
             }
 
-            const grid = buildGrid(state);
+            grid.fill(-1);
+            for (let i = 0; i < state.length; i++) {
+              for (let r = 0; r < heights[i]; r++)
+                for (let c = 0; c < widths[i]; c++)
+                  grid[state[i] + r * COLS + c] = i;
+            }
 
             for (let bi = 0; bi < state.length; bi++) {
-              const b = state[bi];
-              for (const [dx, dy] of dirs) {
-                if (!canMove(b, dx, dy, grid, bi)) continue;
-                const ns = state.map(x => ({...x}));
-                ns[bi] = {...ns[bi], x: ns[bi].x + dx, y: ns[bi].y + dy};
-                const key = encodeState(ns);
-                if (visited.has(key)) continue;
-                visited.add(key);
-                queue.push(ns);
-                parent.push({ stateIdx: head, blockIdx: bi, dx, dy });
+              const pos = state[bi], x = pos % COLS, y = Math.floor(pos / COLS);
+              const w = widths[bi], h = heights[bi];
+              for (let di = 0; di < dirs.length; di++) {
+                const [dx, dy] = dirs[di];
+                const nx = x + dx, ny = y + dy;
+                if (nx < 0 || ny < 0 || nx + w > COLS || ny + h > ROWS) continue;
+                let allowed = true;
+                for (let r = 0; r < h && allowed; r++)
+                  for (let c = 0; c < w; c++) {
+                    const occ = grid[(ny + r) * COLS + nx + c];
+                    if (occ !== -1 && occ !== bi) { allowed = false; break; }
+                  }
+                if (!allowed) continue;
+
+                // 临时移动并编码；只有未访问的状态才分配位置数组
+                state[bi] = ny * COLS + nx;
+                const key = encodeState(state);
+                if (!visited.has(key)) {
+                  visited.add(key);
+                  queue.push(state.slice());
+                  parents.push(head);
+                  movedBlocks.push(bi);
+                  moveDirs.push(di);
+                }
+                state[bi] = pos;
               }
             }
+            // 回溯只需要父节点和移动信息，可释放已经展开的状态
+            queue[head] = null;
             head++;
           }
 
@@ -1011,75 +1017,105 @@
         };
       `;
 
+      function getBoardStateKey() {
+        return blocks.map((b) => b.id + ":" + b.x + "," + b.y).join("|");
+      }
+
+      function clearHintSolution() {
+        hintSolution = null;
+        hintIndex = 0;
+        hintStateKey = null;
+      }
+
+      function stopHintComputation() {
+        if (!hintWorker && !hintWorkerUrl && !hintComputing) return;
+        if (hintWorker) {
+          hintWorker.onmessage = null;
+          hintWorker.onerror = null;
+          hintWorker.onmessageerror = null;
+          hintWorker.terminate();
+          hintWorker = null;
+        }
+        if (hintWorkerUrl) {
+          URL.revokeObjectURL(hintWorkerUrl);
+          hintWorkerUrl = null;
+        }
+        hintComputing = false;
+        const btnHint = document.getElementById("btn-hint");
+        btnHint.disabled = false;
+        btnHint.textContent = "提 示";
+      }
+
+      function applyHintMove() {
+        if (hintStateKey !== getBoardStateKey()) {
+          clearHintSolution();
+          return false;
+        }
+        const move = hintSolution[hintIndex];
+        let moved;
+        solving = true;
+        try {
+          moved = moveBlock(move.id, move.dx, move.dy);
+        } finally {
+          solving = false;
+        }
+        if (!moved) {
+          clearHintSolution();
+          return false;
+        }
+        hintIndex++;
+        hintStateKey = getBoardStateKey();
+        if (hintIndex >= hintSolution.length) clearHintSolution();
+        return true;
+      }
+
       function getHint() {
         if (solving || hintComputing) return;
+        const michelle = blocks.find((b) => b.id === "michelle");
+        if (michelle.x === 1 && michelle.y === 3) return;
 
-        const btnHint = document.getElementById("btn-hint");
-
-        // 如果有缓存的解且还有后续步骤，直接执行
-        if (hintSolution && hintIndex < hintSolution.length) {
-          const move = hintSolution[hintIndex];
-          // 标记为 solving 以避免清除缓存
-          solving = true;
-          moveBlock(move.id, move.dx, move.dy);
-          steps++;
-          stepDisplay.textContent = steps;
-          updateFloorDisplay();
-          solving = false;
-          hintIndex++;
-          if (hintIndex >= hintSolution.length) {
-            hintSolution = null;
-            hintStateKey = null;
-          }
-          return;
-        }
+        if (hintSolution && hintIndex < hintSolution.length && applyHintMove()) return;
 
         // 需要重新计算
+        const btnHint = document.getElementById("btn-hint");
+        const requestVersion = boardVersion;
+        const requestStateKey = getBoardStateKey();
         hintComputing = true;
         btnHint.disabled = true;
         btnHint.textContent = "思考中…";
 
-        const blob = new Blob([workerCode], { type: "application/javascript" });
-        const url = URL.createObjectURL(blob);
-        hintWorker = new Worker(url);
+        try {
+          const blob = new Blob([workerCode], { type: "application/javascript" });
+          hintWorkerUrl = URL.createObjectURL(blob);
+          const worker = new Worker(hintWorkerUrl);
+          hintWorker = worker;
 
-        hintWorker.onmessage = function (e) {
-          URL.revokeObjectURL(url);
-          hintWorker = null;
-          hintComputing = false;
-          btnHint.disabled = false;
-          btnHint.textContent = "提 示";
+          worker.onmessage = function (e) {
+            // 旧请求的已排队消息不能结束或覆盖新请求
+            if (hintWorker !== worker) return;
+            stopHintComputation();
+            if (boardVersion !== requestVersion || getBoardStateKey() !== requestStateKey) return;
 
-          if (e.data.success && e.data.moves.length > 0) {
-            hintSolution = e.data.moves;
-            hintIndex = 0;
-            // 立即执行第一步
-            const move = hintSolution[hintIndex];
-            solving = true;
-            moveBlock(move.id, move.dx, move.dy);
-            steps++;
-            stepDisplay.textContent = steps;
-            updateFloorDisplay();
-            solving = false;
-            hintIndex++;
-            if (hintIndex >= hintSolution.length) {
-              hintSolution = null;
-              hintStateKey = null;
+            if (e.data.success && e.data.moves.length > 0) {
+              hintSolution = e.data.moves;
+              hintIndex = 0;
+              hintStateKey = requestStateKey;
+              applyHintMove();
             }
-          }
-        };
+          };
 
-        hintWorker.onerror = function () {
-          URL.revokeObjectURL(url);
-          hintWorker = null;
-          hintComputing = false;
-          btnHint.disabled = false;
-          btnHint.textContent = "提 示";
+          const onError = function () {
+            if (hintWorker !== worker) return;
+            stopHintComputation();
+            alert("求解出错，请重试");
+          };
+          worker.onerror = onError;
+          worker.onmessageerror = onError;
+          worker.postMessage(blocks.map(({ id, type, x, y }) => ({ id, type, x, y })));
+        } catch (error) {
+          stopHintComputation();
           alert("求解出错，请重试");
-        };
-
-        // 发送当前状态给 Worker
-        hintWorker.postMessage(deepCloneLayout(blocks));
+        }
       }
 
       // ============================================================
@@ -1091,7 +1127,16 @@
       });
 
       window.addEventListener("resize", () => {
+        endDrag();
         renderBoard();
+      });
+
+      window.addEventListener("pagehide", () => {
+        endDrag();
+        stopHintComputation();
+        stopSounds();
+        clearTimeout(victoryTimer);
+        victoryTimer = null;
       });
     </script>
   </body>

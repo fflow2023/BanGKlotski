@@ -12,14 +12,12 @@
 ## 💡 灵感来源
 
 本项目灵感来源于动画 [《BanG Dream!》元祖第 19 集](https://www.bilibili.com/bangumi/play/ep3129294)，剧中出现了华容道的小游戏，于是萌生了复刻这个小游戏的想法。    
-![效果图](images/效果图.png)
+![效果图](images/效果图.webp)
 
 ## 🤖 关于开发
 
-本项目的主要生产工具是 **Antigravity** 和 **Claude Opus 4.6 (Thinking)**。
-
-主要代码内容由 Claude 完成——从需求分析（Plan）、编码实现（Coding）到测试验证（Test）和问题修复（Debug），全程由 Agent 独立驱动，我主要负责提出需求与裁剪素材。
-
+主要代码内容由 Claude Opus 4.6 完成。  
+后续优化由 GPT-6.1 Sol 完成。
 
 ## ⚖️ 版权声明
 
